@@ -6,11 +6,19 @@
 #   export ANTHROPIC_API_KEY="sk-ant-..."
 #   docker compose -f docker-compose.quickstart.yml up --build
 #
+# Defaults are LAN-first: the container binds all interfaces (0.0.0.0) in
+# authenticated/private mode, so the UI is reachable at http://<LAN-IP>:3100
+# with a login. Override PAPERCLIP_BIND (e.g. "loopback") or HOST to change.
 services:
   paperclip:
+    # Reuse a prebuilt image when present (avoids a full source rebuild); fall
+    # back to building from the repo context otherwise.
+    image: ${PAPERCLIP_IMAGE:-paperclip-local:latest}
     build:
       context: ..
       dockerfile: Dockerfile
+    # Survive host reboots and crashes.
+    restart: unless-stopped
     # Ceiling on processes. The image makes tini PID 1 so orphaned agent
     # descendants are reaped instead of piling up as zombies; this is the
     # backstop if something leaks anyway — the container hits its own limit and
@@ -19,12 +27,30 @@ services:
     ports:
       - "${PAPERCLIP_PORT:-3100}:3100"
     environment:
+      # ── Networking ──
+      # Bind all interfaces so the UI is reachable from the LAN.
       HOST: "0.0.0.0"
+      # Explicit bind preset ("lan" == 0.0.0.0). Overrides any stale loopback
+      # value in a persisted config.json.
+      PAPERCLIP_BIND: "${PAPERCLIP_BIND:-lan}"
       PAPERCLIP_HOME: "/paperclip"
 
-      # ── LLM provider keys (at least one is needed for agents to work) ──
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      # ── LLM provider / harness keys (auto-detected from the host env) ──
+      # Each harness reads its own key from the process environment. Any that
+      # are unset simply leave that harness unauthenticated; the rest still work.
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENCODE_API_KEY: "${OPENCODE_API_KEY:-}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      XAI_API_KEY: "${XAI_API_KEY:-}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      CURSOR_API_KEY: "${CURSOR_API_KEY:-}"
+      KIMI_API_KEY: "${KIMI_API_KEY:-}"
+
+      # ── GitHub access for agent workspaces (auto-detected) ──
+      GH_TOKEN: "${GH_TOKEN:-}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
 
       # ── Deployment settings ──
       # "authenticated" requires login, "local_trusted" skips auth
@@ -39,6 +65,9 @@ services:
 
       # ── Required secret for session signing (generate with: openssl rand -hex 32) ──
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+      # ── Agent auth + governed tool-action signing (falls back to BETTER_AUTH_SECRET) ──
+      PAPERCLIP_AGENT_JWT_SECRET: "${PAPERCLIP_AGENT_JWT_SECRET:-}"
+      PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "${PAPERCLIP_TOOL_ACTION_SIGNING_SECRET:-}"
     volumes:
       # Persistent data directory (database, agent workspaces, uploads)
       - "${PAPERCLIP_DATA_DIR:-../data/docker-paperclip}:/paperclip"

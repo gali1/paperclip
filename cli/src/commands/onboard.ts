@@ -191,7 +191,7 @@ function quickstartDefaultsFromEnv(opts?: { preferTrustedLocal?: boolean }): {
     );
   const deploymentMode = preferTrustedLocal
     ? "local_trusted"
-    : (parseEnumFromEnv<DeploymentMode>(process.env.PAPERCLIP_DEPLOYMENT_MODE, DEPLOYMENT_MODES) ?? "local_trusted");
+    : (parseEnumFromEnv<DeploymentMode>(process.env.PAPERCLIP_DEPLOYMENT_MODE, DEPLOYMENT_MODES) ?? "authenticated");
   const deploymentExposureFromEnv = parseEnumFromEnv<DeploymentExposure>(
     process.env.PAPERCLIP_DEPLOYMENT_EXPOSURE,
     DEPLOYMENT_EXPOSURES,
@@ -554,7 +554,10 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
 
   let llm: PaperclipConfig["llm"] | undefined;
   const { defaults: derivedDefaults, usedEnvKeys, ignoredEnvKeys } = quickstartDefaultsFromEnv({
-    preferTrustedLocal: opts.yes === true && !opts.bind,
+    // Default to a LAN-reachable, authenticated bind (0.0.0.0) instead of
+    // forcing trusted-local loopback. Operators can still opt into loopback
+    // explicitly with `--bind loopback` (or PAPERCLIP_BIND=loopback).
+    preferTrustedLocal: false,
   });
   let {
     database,

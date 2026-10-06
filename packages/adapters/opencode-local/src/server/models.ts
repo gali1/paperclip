@@ -7,6 +7,7 @@ import {
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isValidOpenCodeModelId } from "../index.js";
+import { buildOpenCodeModelLabel } from "@paperclipai/adapter-utils/model-labels";
 
 const MODELS_CACHE_TTL_MS = 60_000;
 const MODELS_DISCOVERY_TIMEOUT_MS = 20_000;
@@ -354,11 +355,110 @@ export async function ensureOpenCodeModelConfiguredAndAvailable(input: {
 }
 
 export async function listOpenCodeModels(): Promise<AdapterModel[]> {
+  // 1. The CLI is the authority for which model ids `opencode run --model`
+  //    actually accepts, so prefer its catalog and only decorate the labels.
   try {
-    return await discoverOpenCodeModelsCached();
+    const cliModels = await discoverOpenCodeModelsCached();
+    if (cliModels.length > 0) return sortModelsByLabel(decorateOpenCodeModels(cliModels));
   } catch {
-    return [];
+    // Fall through to the provider endpoints below.
   }
+
+  // 2. OpenCode's OpenAI-compatible discovery endpoints (Zen, Zen Go,
+  //    Interface/Inference) — used when the CLI is unavailable or empty. The
+  //    tier prefix maps to the same `provider/model` ids the CLI emits.
+  try {
+    const httpModels = await discoverOpenCodeHttpModels();
+    if (httpModels.length > 0) return sortModelsByLabel(httpModels);
+  } catch {
+    // Fall through: discovery failed.
+  }
+
+  // No hardcoded fallback. Model catalogs are always pulled from the provider
+  // (the OpenCode CLI or its HTTP endpoints); an empty result is surfaced as a
+  // discovery failure rather than a stale seed list that may name dead models.
+  return [];
+}
+
+/** The tier/plan a canonical `provider/model` id belongs to. */
+export function tierForOpenCodeModel(id: string): string {
+  if (id.startsWith("opencode-go/")) return "OpenCode Zen Go";
+  if (id.startsWith("opencode/")) return "OpenCode Zen";
+  if (id.startsWith("anthropic/")) return "Anthropic (subscription)";
+  if (id.startsWith("github-copilot/")) return "GitHub Copilot (subscription)";
+  const slash = id.indexOf("/");
+  return slash > 0 ? `${id.slice(0, slash)} (subscription)` : "OpenCode";
+}
+
+/** Human display label for a canonical id (never changes the id itself). */
+export function labelOpenCodeModel(id: string): string {
+  const slash = id.indexOf("/");
+  const modelPart = slash >= 0 ? id.slice(slash + 1) : id;
+  return buildOpenCodeModelLabel(tierForOpenCodeModel(id), modelPart);
+}
+
+function decorateOpenCodeModels(models: AdapterModel[]): AdapterModel[] {
+  return models.map((model) => ({ id: model.id, label: labelOpenCodeModel(model.id) }));
+}
+
+/** Group the picker by tier, then alphabetically, using the display label. */
+function sortModelsByLabel(models: AdapterModel[]): AdapterModel[] {
+  return [...models].sort((a, b) =>
+    a.label.localeCompare(b.label, "en", { numeric: true, sensitivity: "base" }),
+  );
+}
+
+/**
+ * OpenCode's unified, OpenAI-compatible model-discovery endpoints. One query
+ * covers every downstream provider (Anthropic, OpenAI, Google, xAI, DeepSeek,
+ * Kimi, Qwen, GLM, MiniMax, ...), so we never enumerate providers individually.
+ */
+export const OPENCODE_MODEL_ENDPOINTS = [
+  { tier: "OpenCode Zen", providerPrefix: "opencode", url: "https://opencode.ai/zen/v1/models" },
+  { tier: "OpenCode Zen Go", providerPrefix: "opencode-go", url: "https://opencode.ai/zen/go/v1/models" },
+  { tier: "OpenCode Interface", providerPrefix: "opencode", url: "https://opencode.ai/inference/v1/models" },
+] as const;
+
+const OPENCODE_HTTP_DISCOVERY_TIMEOUT_MS = 8_000;
+
+async function fetchOpenCodeTierModelIds(url: string, apiKey: string): Promise<string[]> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+  const response = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(OPENCODE_HTTP_DISCOVERY_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const body = (await response.json()) as { data?: Array<{ id?: unknown }> };
+  return (body.data ?? [])
+    .map((entry) => (typeof entry?.id === "string" ? entry.id.trim() : ""))
+    .filter((id) => id.length > 0);
+}
+
+/**
+ * Discover models straight from the OpenCode HTTP tiers. Returns canonical
+ * `provider/model` ids with normalized, tier-labelled display names. A tier
+ * that fails to answer is skipped rather than failing the whole call.
+ */
+export async function discoverOpenCodeHttpModels(
+  env: Record<string, string> = {},
+): Promise<AdapterModel[]> {
+  const apiKey = (env.OPENCODE_API_KEY ?? process.env.OPENCODE_API_KEY ?? "").trim();
+  const byId = new Map<string, AdapterModel>();
+  for (const tier of OPENCODE_MODEL_ENDPOINTS) {
+    let ids: string[];
+    try {
+      ids = await fetchOpenCodeTierModelIds(tier.url, apiKey);
+    } catch {
+      continue;
+    }
+    for (const raw of ids) {
+      const id = `${tier.providerPrefix}/${raw}`;
+      if (byId.has(id)) continue;
+      byId.set(id, { id, label: buildOpenCodeModelLabel(tier.tier, raw) });
+    }
+  }
+  return [...byId.values()];
 }
 
 export function resetOpenCodeModelsCacheForTests() {

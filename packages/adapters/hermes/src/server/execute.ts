@@ -441,7 +441,11 @@ export async function execute(
   const args: string[] = ["chat", "-q", prompt];
   if (useQuiet) args.push("-Q");
 
-  if (model) {
+  // "auto" means "let Hermes resolve the model from its own config". Forwarding
+  // it as `-m auto` sends a literal model called "auto" to the upstream
+  // provider, which real providers reject (OpenCode Zen returns HTTP 400
+  // "Model is unavailable"). Only pass an explicit, non-auto model.
+  if (model && model !== "auto") {
     args.push("-m", model);
   }
 

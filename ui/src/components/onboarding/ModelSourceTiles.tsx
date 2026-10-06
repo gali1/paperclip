@@ -184,7 +184,7 @@ export function ModelSourceTiles({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn("flex items-start gap-3", collapsed && "justify-center")}
+      className={cn("flex flex-wrap items-start gap-3", collapsed && "justify-center")}
       onKeyDown={(event) => {
         // Collapsed, the row is a statement rather than a choice; arrow keys
         // would move a selection that is no longer being asked for.
@@ -214,8 +214,11 @@ export function ModelSourceTiles({
             transition={SOURCE_COLLAPSE_MOVE}
             exit={{ opacity: 0, transition: SOURCE_EXIT_FADE }}
             className={cn(
-              "flex min-w-0",
-              collapsed ? "w-(--sz-source-tile-two-up)" : "flex-1",
+              "flex",
+              // Every enabled harness is offered now, so the row wraps into a
+              // grid instead of squashing N tiles into one line. Collapsed
+              // (a sign-in is running) keeps the single centred survivor.
+              collapsed ? "min-w-0 w-(--sz-source-tile-two-up)" : "min-w-[6.5rem] flex-1",
             )}
           >
             <ModelSourceTile

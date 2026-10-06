@@ -1,5 +1,8 @@
 import * as React from "react";
 import { StrictMode } from "react";
+// Must be first: installs the crypto.randomUUID polyfill for insecure contexts
+// (plain-HTTP LAN access) before any other module can call it.
+import "./lib/random-uuid";
 import * as ReactDOM from "react-dom";
 import { BrowserRouter } from "@/lib/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

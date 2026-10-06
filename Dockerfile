@@ -205,6 +205,7 @@ ARG PAPERCLIP_BUILD_COMMIT=""
 ENV NODE_ENV=production \
   HOME=/paperclip \
   HOST=0.0.0.0 \
+  PAPERCLIP_BIND=lan \
   PORT=3100 \
   SERVE_UI=true \
   PAPERCLIP_HOME=/paperclip \

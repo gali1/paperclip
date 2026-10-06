@@ -248,13 +248,34 @@ const MODEL_SOURCE_INLINE_MARKS: Record<string, ComponentType<{ className?: stri
  * mapping already existed in this file as prose inside the environment-check
  * hint; this is the same knowledge, in a form the key field can use.
  */
+// Adapters that authenticate with a provider API key map to the exact env var
+// the harness reads. Adapters absent from this map take no API key (for example
+// `hermes_local`, whose config carries no key field, and `hermes_gateway`, which
+// stores its key as an adapter-config secret rather than an env binding).
 const API_KEY_ENV_KEYS: Record<string, string> = {
   claude_local: ANTHROPIC_API_KEY_ENV_KEY,
   codex_local: "OPENAI_API_KEY",
+  opencode_local: "OPENCODE_API_KEY",
+  gemini_local: "GEMINI_API_KEY",
+  kimi_local: "KIMI_MODEL_API_KEY",
+  grok_local: "XAI_API_KEY",
+  cursor: "CURSOR_API_KEY",
+  cursor_cloud: "CURSOR_API_KEY",
+  pi_local: "PI_API_KEY",
 };
 
-function apiKeyEnvKeyFor(adapterType: string): string {
-  return API_KEY_ENV_KEYS[adapterType] ?? "API_KEY";
+/**
+ * Resolve the env var an adapter's API key belongs in, or `undefined` when the
+ * adapter does not take one.
+ *
+ * This deliberately has no fallback. The previous `?? "API_KEY"` default wrote
+ * a binding under the literal name `API_KEY`, which is absent from the server's
+ * agent-env allowlist and is not read by any harness — so the key silently went
+ * nowhere and could fail agent-config validation. Returning `undefined` lets
+ * callers skip the binding instead of inventing an invalid one.
+ */
+function apiKeyEnvKeyFor(adapterType: string): string | undefined {
+  return API_KEY_ENV_KEYS[adapterType];
 }
 
 function ModelSourceMark({
@@ -703,7 +724,7 @@ function OnboardingWizardInner({
   // otherwise only reuse an unambiguous account, regardless of list ordering.
   const savedSubscription = savedKeys.subscriptions.find((option) => option.aiConnection?.mode === "responsible_user")
     ?? (savedKeys.subscriptions.length === 1 ? savedKeys.subscriptions[0] : undefined);
-  const [selectedSavedKey, setSelectedSavedKey] = useState<{ companyId: string; envKey: string; id: string } | null>(null);
+  const [selectedSavedKey, setSelectedSavedKey] = useState<{ companyId: string; envKey: string | undefined; id: string } | null>(null);
   const selectedApiKeyId = selectedSavedKey?.companyId === createdCompanyId && selectedSavedKey?.envKey === apiKeyEnvKeyFor(adapterType)
     ? selectedSavedKey.id
     : savedKeys.options[0]?.id;
@@ -759,7 +780,7 @@ function OnboardingWizardInner({
    * customer on the step to try again — and without this each press would store
    * another copy of the same credential.
    */
-  const apiKeySecretRef = useRef<{ key: string; companyId: string; envKey: string; binding?: Awaited<ReturnType<typeof storeProviderApiKey>>["binding"]; aiConnection?: AiConnectionBinding } | null>(null);
+  const apiKeySecretRef = useRef<{ key: string; companyId: string; envKey: string | undefined; binding?: Awaited<ReturnType<typeof storeProviderApiKey>>["binding"]; aiConnection?: AiConnectionBinding } | null>(null);
   const managedSubscriptionRef = useRef<{ companyId: string; binding: AiConnectionBinding } | null>(null);
   const managedProvider = aiProviderForAdapter(adapterType);
   function managedBindingForStep(): AiConnectionBinding | undefined {
@@ -1148,13 +1169,22 @@ function OnboardingWizardInner({
     };
   }, [disabledTypes]);
 
+  // The connect step offers every enabled harness, not just the registry's
+  // "recommended" pair. Recommended sources lead the row; the rest follow, so
+  // the operator can pick OpenCode, Gemini, Kimi, Cursor, Pi, Grok, etc. during
+  // first-run setup instead of being limited to Claude and OpenAI.
+  const sourceAdapters = useMemo(
+    () => [...recommendedAdapters, ...moreAdapters],
+    [recommendedAdapters, moreAdapters],
+  );
+
   /**
    * A source chosen from the visible row. Read off the row rather than off
    * `adapterType` alone, because a restored draft can name an adapter this step
    * no longer offers — a selection the customer cannot see.
    */
   const sourceSelected =
-    sourcePicked && recommendedAdapters.some((opt) => opt.type === adapterType);
+    sourcePicked && sourceAdapters.some((opt) => opt.type === adapterType);
 
   /**
    * Whether the connect step may advance.
@@ -1795,6 +1825,10 @@ function OnboardingWizardInner({
   async function storeApiKeyUserSecret(companyId: string): Promise<boolean> {
     const key = apiKey.trim();
     const envKey = apiKeyEnvKeyFor(adapterType);
+    if (!managedProvider && !envKey) {
+      setError("This harness does not take an API key. Configure its credentials in the agent settings instead.");
+      return false;
+    }
     if (apiKeySecretRef.current?.key === key && apiKeySecretRef.current.companyId === companyId && apiKeySecretRef.current.envKey === envKey) return true;
     try {
       if (managedProvider) {
@@ -1872,7 +1906,12 @@ function OnboardingWizardInner({
         typeof config.env === "object" && config.env !== null && !Array.isArray(config.env)
           ? { ...(config.env as Record<string, unknown>) }
           : {};
-      env[apiKeyEnvKeyFor(adapterType)] = selectedApiKey?.binding ?? apiKeySecretRef.current?.binding;
+      const envKey = apiKeyEnvKeyFor(adapterType);
+      const binding = selectedApiKey?.binding ?? apiKeySecretRef.current?.binding;
+      // Adapters with no key env var get no binding at all — better an explicit
+      // "no credential" config (which the hire then blocks on) than a binding
+      // written under a name no harness reads.
+      if (envKey && binding) env[envKey] = binding;
       config.env = env;
     }
     if (credentialMode === "subscription" && savedSubscription?.binding) {
@@ -2672,7 +2711,7 @@ function OnboardingWizardInner({
                         question, and answering it is what opens the card. */}
                     <ModelSourceTiles
                       label="Model source"
-                      sources={recommendedAdapters.map((opt) => ({
+                      sources={sourceAdapters.map((opt) => ({
                         id: opt.type,
                         label: CONNECT_SOURCE_NAMES[opt.type] ?? opt.label,
                         icon: <ModelSourceMark type={opt.type} Fallback={opt.icon} />,
@@ -2680,7 +2719,7 @@ function OnboardingWizardInner({
                       mode={credentialMode}
                       selectedId={
                         sourcePicked &&
-                        recommendedAdapters.some((opt) => opt.type === adapterType)
+                        sourceAdapters.some((opt) => opt.type === adapterType)
                           ? adapterType
                           : null
                       }

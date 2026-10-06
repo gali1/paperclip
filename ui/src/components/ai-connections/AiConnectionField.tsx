@@ -30,7 +30,12 @@ export function aiProviderForAdapter(
     {
       claude_local: "anthropic",
       codex_local: "openai",
-      opencode_local: "openrouter",
+      // opencode_local is intentionally absent. An OpenCode key authenticates
+      // OpenCode's own Zen/Go endpoints (OPENCODE_API_KEY) — it is not an
+      // OpenRouter key, so routing it through the OpenRouter AI-connection
+      // validator rejects a perfectly valid key. Without a managed provider the
+      // key is stored as a plain OPENCODE_API_KEY user secret, which is exactly
+      // what the OpenCode CLI reads (see `opencode auth list`).
       grok_local: "xai",
     } as Record<string, AiProvider>
   )[adapterType];

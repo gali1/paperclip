@@ -133,6 +133,10 @@ import { agentConfigurationDoc as piAgentConfigurationDoc } from "@paperclipai/a
 import { BUILTIN_ADAPTER_TYPES } from "./builtin-adapter-types.js";
 import { buildExternalAdapters } from "./plugin-loader.js";
 import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
+import {
+  discoverProviderModels,
+  hasProviderModelDiscovery,
+} from "@paperclipai/adapter-utils/model-discovery";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 import {
@@ -1062,12 +1066,15 @@ export async function listAdapterModels(type: string): Promise<{ id: string; lab
   if (declaredModels) return declaredModels;
   const adapter = findActiveServerAdapter(type);
   if (!adapter) return [];
-  // The built-in Codex adapter's OpenAI discovery includes image, audio, and
-  // embedding models that Codex cannot run. Use its curated list; declared
-  // models above and custom adapter discovery remain authoritative.
-  if (adapter === codexLocalAdapter) return adapter.models ?? [];
+  // Adapter-level discovery (CLI/API) is authoritative when it returns models.
   if (adapter.listModels) {
     const discovered = await adapter.listModels();
+    if (discovered.length > 0) return discovered;
+  }
+  // Adapters without their own discovery still resolve their catalog live from
+  // the provider's models endpoint — never from a shipped, hardcoded list.
+  if (hasProviderModelDiscovery(type)) {
+    const discovered = await discoverProviderModels(type);
     if (discovered.length > 0) return discovered;
   }
   return adapter.models ?? [];
@@ -1076,7 +1083,6 @@ export async function listAdapterModels(type: string): Promise<{ id: string; lab
 export async function refreshAdapterModels(type: string): Promise<{ id: string; label: string }[]> {
   const declaredModels = declaredModelsForAdapter(type);
   if (declaredModels) return declaredModels;
-  if (findActiveServerAdapter(type) === codexLocalAdapter) return listAdapterModels(type);
   const adapter = findActiveServerAdapter(type);
   if (!adapter) return [];
   if (adapter.refreshModels) {
@@ -1085,6 +1091,10 @@ export async function refreshAdapterModels(type: string): Promise<{ id: string; 
   }
   if (adapter.listModels) {
     const discovered = await adapter.listModels();
+    if (discovered.length > 0) return discovered;
+  }
+  if (hasProviderModelDiscovery(type)) {
+    const discovered = await discoverProviderModels(type);
     if (discovered.length > 0) return discovered;
   }
   return adapter.models ?? [];
