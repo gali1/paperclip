@@ -25,6 +25,8 @@ import { ADAPTER_AUTH_MISSING_CHECK_CODE } from "@paperclipai/shared";
 import { useNavigate, useSearchParams } from "@/lib/router";
 import { agentsApi } from "@/api/agents";
 import { adaptersApi } from "@/api/adapters";
+import { AgentDiscoveryPanel } from "@/components/agent-discovery/AgentDiscoveryPanel";
+import { AutoProviderDiscovery } from "@/components/provider-discovery/AutoProviderDiscovery";
 import { environmentsApi } from "@/api/environments";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { secretsApi } from "@/api/secrets";
@@ -921,6 +923,23 @@ function Setup({
                           </p>
                         )}
                         {hasCredentialField && !aiBinding && (
+                          <>
+                            <AutoProviderDiscovery
+                              companyId={companyId}
+                              providerKeys={providerKeys}
+                              onSelect={(selection) => {
+                                if (selection.providerKey && providerKeys[selection.providerKey]) {
+                                  setProvider(selection.providerKey);
+                                  setModel(selection.defaultModel ?? "");
+                                  setApiKey("");
+                                  setProviderBinding(null);
+                                  resetTest();
+                                }
+                                if (selection.baseUrl && adapterType === "kimi_local") {
+                                  setKimiBaseUrl(selection.baseUrl);
+                                }
+                              }}
+                            />
                           <div className="grid gap-5 sm:grid-cols-2">
                             {chooseProvider && (
                               <Field label="API key provider">
@@ -1034,19 +1053,33 @@ function Setup({
                               {multiProvider && ` Use a ${provider}/model ID.`}
                             </p>
                           </div>
+                          </>
                         )}
                         {adapterType === "hermes_gateway" && (
-                          <Field label="Hermes API base URL">
-                            <Input
-                              aria-label="Hermes API base URL"
-                              value={gatewayUrl}
-                              onChange={(event) => {
-                                setGatewayUrl(event.target.value);
-                                resetTest();
+                          <>
+                            <Field label="Hermes API base URL">
+                              <Input
+                                aria-label="Hermes API base URL"
+                                value={gatewayUrl}
+                                onChange={(event) => {
+                                  setGatewayUrl(event.target.value);
+                                  resetTest();
+                                }}
+                                placeholder="https://hermes.example.com"
+                              />
+                            </Field>
+                            <AgentDiscoveryPanel
+                              companyId={companyId}
+                              adapterType={adapterType}
+                              onApply={(candidate) => {
+                                const url = candidate.configPatch.apiBaseUrl;
+                                if (typeof url === "string" && url.trim()) {
+                                  setGatewayUrl(url);
+                                  resetTest();
+                                }
                               }}
-                              placeholder="https://hermes.example.com"
                             />
-                          </Field>
+                          </>
                         )}
                         {usingKimiApi && (
                           <div className="grid gap-5 sm:grid-cols-2">

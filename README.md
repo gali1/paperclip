@@ -185,6 +185,43 @@ Preview and install <a href="https://docs.paperclip.ing/guides/org/team-catalog/
 
 Experimental **Agent Chat** and **chat/email connectors** add conversations with agents in Paperclip and through configured services such as Slack, Discord, Telegram, and AgentMail. Enable the relevant instance settings to try them.
 
+### Finding and operating agents without configuration guesswork
+
+This build adds discovery surfaces for the two questions setup used to leave to the user: *where is the agent?* and *which providers can this instance already reach?*
+
+<table>
+<tr>
+<td width="50%">
+
+**Agent discovery**
+
+Selecting an agent type can now sweep the environment instead of asking for a path. Paperclip checks agents already registered for the company, binaries on `PATH` and in known install directories, documented API ports, running containers, and endpoints you supply — then validates each hit through the adapter's own environment test. A version probe that exceeds its budget falls back to reading the entry point, so a slow Python CLI is not mistaken for a foreign binary.
+
+Inside Docker, loopback is the container, so candidate endpoints are also probed through the host gateway (`host.docker.internal`, the `/proc/net/route` gateway, or `PAPERCLIP_HOST_GATEWAY`). A loopback bind inside a container is reported as an error rather than silently failing.
+
+`GET /api/companies/:companyId/adapters/discovery/deployment` explains the current topology; `POST /api/companies/:companyId/adapters/:type/discover` returns ranked candidates with the exact config that would adopt each one. Discovery is read-only: it never writes configuration, starts a process, or returns a credential.
+
+</td>
+<td width="50%">
+
+**AUTO provider discovery**
+
+The agent setup credential step offers an **AUTO scan** alongside the provider picker. It inspects provider environment variables (including aliases such as `OPENAI_KEY`, `CLAUDE_API_KEY`, `PPLX_API_KEY`), a bounded allowlist of client config files, documented local inference ports, reachable containers, and configured base URLs, then classifies each result as *ready*, *needs configuration*, *compatible but unverified*, *detected but unvalidated*, or *not reachable*.
+
+Hosted providers are never probed and API keys are never transmitted: a key being present is reported as a fact, not as proof that the provider works. Adopting a result only prefills the form — the credential still goes through the normal secret flow.
+
+**LOCAL console**
+
+`Org → Local` is a small operator console. It answers questions about the instance and runs commands against the real services (`/help`, `/providers`, `/artifacts`). It does not create tasks or artifacts unless you ask for them in a task, and anything produced elsewhere in Paperclip stays in the usual artifact browser.
+
+</td>
+</tr>
+</table>
+
+Task actions in the sidebar's recent-task menu now include **Delete**, with a Yes/No confirmation before anything is removed.
+
+Known limits worth knowing before you rely on these: discovery scans live in memory, so a restart drops an in-flight scan; a stdio-only CLI installed on the host cannot be executed from inside the Paperclip container (use its API/gateway, or run Paperclip natively); and container inspection needs the Docker CLI with daemon permission.
+
 <br/>
 
 ## Problems Paperclip solves

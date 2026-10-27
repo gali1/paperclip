@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, MoreHorizontal, Pencil, RefreshCw } from "lucide-react";
+import { Archive, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { agentsApi } from "@/api/agents";
 import { authApi } from "@/api/auth";
 import { issuesApi } from "@/api/issues";
+import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/queryKeys";
 import { useRecentTasks } from "@/hooks/useRecentTasks";
 import { useSidebar } from "@/context/SidebarContext";
@@ -112,7 +113,10 @@ function RecentTasksList({
   const toastActions = useOptionalToastActions();
   const [renameEntry, setRenameEntry] = useState<RecentTaskEntry | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [pendingAction, setPendingAction] = useState<"rename" | "archive" | "pause" | null>(null);
+  const [deleteEntry, setDeleteEntry] = useState<RecentTaskEntry | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    "rename" | "archive" | "pause" | "delete" | null
+  >(null);
   const restartRetryStorageKey = restartWakeRetryStorageKey(companyId, userId);
 
   if (entries.length === 0) return null;
@@ -150,6 +154,27 @@ function RecentTasksList({
       toastActions?.pushToast({
         title: "Task rename failed",
         body: errorMessage(error, "Unable to rename this task."),
+        tone: "error",
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const deleteTask = async (entry: RecentTaskEntry) => {
+    setPendingAction("delete");
+    try {
+      await issuesApi.remove(entry.id);
+      setDeleteEntry(null);
+      await refreshIssueQueries(entry.id);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.sidebarBadges(companyId),
+      });
+      toastActions?.pushToast({ title: "Task deleted", tone: "success" });
+    } catch (error) {
+      toastActions?.pushToast({
+        title: "Task delete failed",
+        body: errorMessage(error, "Unable to delete this task."),
         tone: "error",
       });
     } finally {
@@ -302,6 +327,14 @@ function RecentTasksList({
                     <RefreshCw aria-hidden="true" />
                     Pause/Restart
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={cn(RECENT_TASK_MENU_ITEM_CLASS, "text-destructive focus:text-destructive")}
+                    disabled={pendingAction !== null}
+                    onSelect={() => setDeleteEntry(entry)}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Delete
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
@@ -345,6 +378,45 @@ function RecentTasksList({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteEntry !== null}
+        onOpenChange={(open) => {
+          if (!open && pendingAction !== "delete") setDeleteEntry(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete task?</DialogTitle>
+            <DialogDescription>
+              “{deleteEntry?.title}” and its comments, attachments and history will be
+              permanently removed. This cannot be undone. Choose Yes to delete it, or No to keep
+              it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pendingAction === "delete"}
+              onClick={() => setDeleteEntry(null)}
+            >
+              No
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              aria-label="Yes, delete task"
+              disabled={pendingAction === "delete"}
+              onClick={() => {
+                if (deleteEntry) void deleteTask(deleteEntry);
+              }}
+            >
+              {pendingAction === "delete" ? "Deleting..." : "Yes"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

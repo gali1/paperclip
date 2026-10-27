@@ -121,6 +121,9 @@ import {
   runtimeConnectionIntentRoutes,
 } from "./routes/connection-intents.js";
 import { adapterRoutes } from "./routes/adapters.js";
+import { agentDiscoveryRoutes } from "./routes/agent-discovery.js";
+import { providerDiscoveryRoutes } from "./routes/provider-discovery.js";
+import { localChatRoutes } from "./routes/local-chat.js";
 import { managedAgentProfileRoutes } from "./routes/managed-agent-profiles.js";
 import { remoteAgentProfileRoutes } from "./routes/remote-agent-profiles.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
@@ -948,6 +951,41 @@ export async function createApp(
       getNativeRunnerEnabled: async () =>
         (await instanceSettingsService(db).getExperimental())
           .enableNativeRunner === true,
+    }),
+  );
+  api.use(
+    agentDiscoveryRoutes({
+      db,
+      deployment: {
+        bindHost: opts.bindHost,
+        port: opts.serverPort,
+        publicUrl: opts.authPublicBaseUrl,
+        deploymentMode: opts.deploymentMode,
+        deploymentExposure: opts.deploymentExposure,
+      },
+    }),
+  );
+  api.use(
+    localChatRoutes({
+      db,
+      deployment: {
+        bindHost: opts.bindHost,
+        port: opts.serverPort,
+        deploymentMode: opts.deploymentMode,
+        deploymentExposure: opts.deploymentExposure,
+      },
+    }),
+  );
+  api.use(
+    providerDiscoveryRoutes({
+      db,
+      deployment: {
+        bindHost: opts.bindHost,
+        port: opts.serverPort,
+        publicUrl: opts.authPublicBaseUrl,
+        deploymentMode: opts.deploymentMode,
+        deploymentExposure: opts.deploymentExposure,
+      },
     }),
   );
   api.use(

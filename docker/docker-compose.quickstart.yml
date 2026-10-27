@@ -26,6 +26,11 @@ services:
     pids_limit: 2048
     ports:
       - "${PAPERCLIP_PORT:-3100}:3100"
+    # Reach host-native agents from inside this container. Docker Desktop always
+    # provides host.docker.internal; the explicit host-gateway mapping makes the
+    # same alias resolve on Linux, where it is otherwise undefined.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # ── Networking ──
       # Bind all interfaces so the UI is reachable from the LAN.

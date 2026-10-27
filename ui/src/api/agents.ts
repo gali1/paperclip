@@ -389,7 +389,105 @@ export const agentsApi = {
     ),
   availableSkills: () =>
     api.get<{ skills: AvailableSkill[] }>("/skills/available"),
+  /**
+   * Deployment-aware discovery for one adapter type.
+   *
+   * Read-only: the server probes PATH, documented API ports, running containers
+   * and the supplied remote endpoints, then returns ranked candidates with the
+   * adapter `configPatch` that would adopt each one.
+   */
+  discover: (
+    companyId: string,
+    type: string,
+    data: {
+      remoteEndpoints?: string[];
+      configOverrides?: Record<string, unknown>;
+      includeContainers?: boolean;
+      validate?: boolean;
+      refresh?: boolean;
+      timeoutMs?: number;
+    } = {},
+  ) =>
+    api.post<AgentDiscoveryReport>(
+      `/companies/${encodeURIComponent(companyId)}/adapters/${encodeURIComponent(type)}/discover`,
+      data,
+    ),
+  deploymentDiagnostics: (companyId: string, probePort?: number) => {
+    const query = probePort ? `?probePort=${encodeURIComponent(probePort)}` : "";
+    return api.get<DeploymentDiagnostics>(
+      `/companies/${encodeURIComponent(companyId)}/adapters/discovery/deployment${query}`,
+    );
+  },
 };
+
+export interface AgentDiscoveryEvidence {
+  stage: string;
+  code: string;
+  level: "info" | "warn" | "error";
+  message: string;
+  detail?: string;
+}
+
+export interface DiscoveredAgent {
+  id: string;
+  adapterType: string;
+  source:
+    | "registered_agent"
+    | "cli"
+    | "local_api"
+    | "docker_container"
+    | "remote_endpoint";
+  transport: "cli" | "http" | "websocket" | "acp";
+  label: string;
+  executablePath?: string;
+  version?: string | null;
+  endpoint?: string;
+  agentId?: string;
+  agentName?: string;
+  reachable: boolean;
+  validated: boolean;
+  validationStatus?: "pass" | "warn" | "fail" | "skipped";
+  configPatch: Record<string, unknown>;
+  requiredInputs: string[];
+  capabilities: string[];
+  warnings: string[];
+  evidence: AgentDiscoveryEvidence[];
+}
+
+export interface AgentDiscoveryReport {
+  adapterType: string;
+  companyId: string;
+  generatedAt: string;
+  durationMs: number;
+  deployment: DeploymentDiagnostics;
+  candidates: DiscoveredAgent[];
+  checks: AgentDiscoveryEvidence[];
+  cache: { hit: boolean; ageMs: number };
+  notes: string[];
+  recommendedCandidateId: string | null;
+}
+
+export interface DeploymentDiagnostics {
+  mode: "native" | "container";
+  platform: string;
+  containerEvidence: string[];
+  bindHost: string;
+  port: number;
+  publicUrl?: string;
+  deploymentMode?: string;
+  deploymentExposure?: string;
+  hostGatewayCandidates: string[];
+  reachableHostAddresses: string[];
+  loopbackIsProcessLocalOnly: boolean;
+  checks: AgentDiscoveryEvidence[];
+  hints?: string[];
+  connectivity?: Array<{
+    host: string;
+    port: number;
+    reachable: boolean;
+    role: "host_gateway" | "loopback";
+  }>;
+}
 
 export interface AvailableSkill {
   name: string;

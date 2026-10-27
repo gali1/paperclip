@@ -58,6 +58,7 @@ import { useCombinedInboxTasksEnabled } from "./hooks/useCombinedInboxTasksEnabl
 import { WhatNeedsMe } from "./pages/WhatNeedsMe";
 import { DecisionQueuePage } from "./pages/DecisionQueuePage";
 import { BoardChat } from "./pages/BoardChat";
+import { LocalChat } from "./pages/LocalChat";
 import { CompanySettings } from "./pages/CompanySettings";
 import { CompanyEnvironments } from "./pages/CompanyEnvironments";
 import { BootstrapSetupUxLab } from "./pages/BootstrapSetupUxLab";
@@ -430,6 +431,9 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
           flag is off. The board-level `artifacts` mount below is the new
           conference-room one; the master-level mount above it still serves
           `/artifacts` in both modes. */}
+      {/* LOCAL is a first-class surface: it does not depend on the
+          conference-room experimental flag. */}
+      <Route path="local" element={<LocalChat />} />
       <Route element={<ConferenceRoomChatGate />}>
         <Route path="board-chat" element={<BoardChat />} />
         <Route path="artifacts" element={<Artifacts />} />

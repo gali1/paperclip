@@ -30,6 +30,13 @@ services:
     pids_limit: 2048
     ports:
       - "3100:3100"
+    # Host-native agents (Hermes gateway, OpenClaw, a locally served OpenCode)
+    # listen on the Docker host's loopback. Inside this container "localhost" is
+    # the container itself, so discovery and the gateway adapters reach the host
+    # through this alias. Docker Desktop provides it automatically; the explicit
+    # mapping makes the same name work on Linux.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DATABASE_URL: postgres://paperclip:paperclip@db:5432/paperclip
       PORT: "3100"
