@@ -399,6 +399,7 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
       <Route path="goals" element={<Goals />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
       <Route path="artifacts" element={<Artifacts />} />
+      <Route path="local" element={<LocalChat />} />
       <Route path="approvals" element={<Navigate to="/approvals/pending" replace />} />
       <Route path="approvals/pending" element={<Approvals />} />
       <Route path="approvals/all" element={<Approvals />} />
@@ -431,9 +432,6 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
           flag is off. The board-level `artifacts` mount below is the new
           conference-room one; the master-level mount above it still serves
           `/artifacts` in both modes. */}
-      {/* LOCAL is a first-class surface: it does not depend on the
-          conference-room experimental flag. */}
-      <Route path="local" element={<LocalChat />} />
       <Route element={<ConferenceRoomChatGate />}>
         <Route path="board-chat" element={<BoardChat />} />
         <Route path="artifacts" element={<Artifacts />} />
@@ -843,6 +841,7 @@ export function App() {
           <Route path="pipelines/:pipelineId/items/:caseId" element={<UnprefixedBoardRedirect />} />
           <Route path="pipelines/:pipelineId/cases/:caseId" element={<UnprefixedBoardRedirect />} />
           <Route path="artifacts" element={<UnprefixedBoardRedirect />} />
+          <Route path="local" element={<UnprefixedBoardRedirect />} />
           <Route path="audit" element={<UnprefixedBoardRedirect />} />
           {streamlinedUiEnabled ? (
             <>

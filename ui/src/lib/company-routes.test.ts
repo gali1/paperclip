@@ -94,6 +94,16 @@ describe("company routes", () => {
     expect(toCompanyRelativePath("/PAP/artifacts")).toBe("/artifacts");
   });
 
+  it("treats /local as a board route, never as a company prefix", () => {
+    // Regression: a top-level /local route made the router read "LOCAL" as the
+    // active company prefix, so every ORG link became /LOCAL/... and the shell
+    // answered "Organization not found".
+    expect(isBoardPathWithoutPrefix("/local")).toBe(true);
+    expect(extractCompanyPrefixFromPath("/local")).toBeNull();
+    expect(applyCompanyPrefix("/local", "PAP")).toBe("/PAP/local");
+    expect(toCompanyRelativePath("/PAP/local")).toBe("/local");
+  });
+
   it("treats /audit as a board route that needs a company prefix", () => {
     expect(isBoardPathWithoutPrefix("/audit")).toBe(true);
     expect(extractCompanyPrefixFromPath("/audit")).toBeNull();
